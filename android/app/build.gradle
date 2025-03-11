@@ -77,6 +77,13 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+        externalNativeBuild {
+        cmake {
+            path "CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+
     namespace "com.whisperstt"
     defaultConfig {
         applicationId "com.whisperstt"
@@ -84,6 +91,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+      
     }
     signingConfigs {
         debug {
@@ -103,13 +111,15 @@ android {
             signingConfig signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
-        }
-    }
+        }  
+    }  
 }
 
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+    implementation 'org.tensorflow:tensorflow-lite:2.11.0'
+    implementation 'org.tensorflow:tensorflow-lite-support:0.4.3'
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

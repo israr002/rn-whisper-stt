@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import {
+  FlatList,
   Image,
+  NativeModules,
   Platform,
   StatusBar,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -12,23 +15,37 @@ import { PERMISSIONS } from 'react-native-permissions';
 import Record from './src/assets/record.png';
 import RecordingWaves from './src/components/RecordingWaves';
 
+const { WhisperModule } = NativeModules;
+
 function App(): React.JSX.Element {
   const [recording, setRecording] = useState(false);
+  const [transcriptions, setTranscriptions] = useState<string[]>([]);
 
   const startRecording = async () => {
     if (!recording) {
-      setRecording(true);
       const hasPermission = await requestPermission(
         Platform.OS === 'android'
           ? PERMISSIONS.ANDROID.RECORD_AUDIO
           : PERMISSIONS.IOS.SPEECH_RECOGNITION,
       );
       if (!hasPermission) {
-        console.log('Permission denied');
         return;
       }
+      setRecording(true);
+      await WhisperModule.startRecording();
     } else {
-      setRecording(false);
+      stopRecording();
+    }
+  };
+
+  const stopRecording = async () => {
+    setRecording(false);
+
+    const transcribedText = await WhisperModule.stopRecording();
+    console.log('transcribedText', transcribedText);
+
+    if (transcribedText) {
+      setTranscriptions((prev) => [ ...prev,transcribedText]); // Add new text at the top
     }
   };
 
@@ -42,6 +59,16 @@ function App(): React.JSX.Element {
             {recording ? <View style={styles.stopIcon} /> : <Image source={Record} style={styles.icon} />}
           </TouchableOpacity>
         </View>
+        <FlatList
+          data={transcriptions}
+          keyExtractor={(_, index) => index.toString()}
+          contentContainerStyle={styles.listContainer}
+          renderItem={({ item }) => (
+            <View style={styles.listItem}>
+              <Text style={styles.listItemText}>{item}</Text>
+            </View>
+          )}
+        />
       </View>
     </View>
   );
@@ -58,9 +85,9 @@ const styles = StyleSheet.create({
     marginTop: StatusBar.currentHeight,
   },
   recorderContainer: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingVertical: 20,
   },
   button: {
     borderRadius: 30,
@@ -79,6 +106,21 @@ const styles = StyleSheet.create({
     height: 20,
     width: 20,
     backgroundColor: 'white',
+  },
+  listContainer: {
+    flexGrow: 1,
+    paddingVertical: 10,
+  },
+  listItem: {
+    marginHorizontal: 20,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(0,0,0,0.2)',
+    paddingVertical: 10,
+  },
+  listItemText: {
+    color: 'black',
+    textAlign: 'center',
+    fontSize: 16,
   },
 });
 
