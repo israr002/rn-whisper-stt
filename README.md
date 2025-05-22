@@ -3,8 +3,9 @@
 WhisperSTT is a React Native application that provides on-device speech-to-text transcription using the Whisper model from OpenAI, optimized for mobile devices through TensorFlow Lite.
 
 ## Demo Video
-<video src="https://github.com/israr002/rn-whisper-stt/blob/main/src/assets/whisperstt.mp4?raw=true" controls="controls" style="max-width: 730px;">
-</video>
+https://github.com/user-attachments/assets/bbb57d6b-c9cf-4b9d-b64a-01a47f43ae30
+
+
 
 ## Features
 
