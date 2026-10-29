@@ -44,4 +44,26 @@ Java_com_whisperstt_whisperengine_WhisperEngine_transcribeFileWithMel(JNIEnv *en
     return resultArray;
 }
 
+JNIEXPORT jfloatArray JNICALL
+Java_com_whisperstt_whisperengine_WhisperEngine_melFromSamples(JNIEnv *env,
+                                                               jobject thiz,
+                                                               jlong nativePtr,
+                                                               jfloatArray samples,
+                                                               jfloatArray filtersJava) {
+    whisperstt *engine = reinterpret_cast<whisperstt *>(nativePtr);
+
+    jsize filtersSize = env->GetArrayLength(filtersJava);
+    std::vector<float> filters(filtersSize);
+    env->GetFloatArrayRegion(filtersJava, 0, filtersSize, filters.data());
+
+    jsize n = env->GetArrayLength(samples);
+    jfloat *pcm = env->GetFloatArrayElements(samples, NULL);
+    std::vector<float> result = engine->melFromSamples(pcm, n, filters);
+    env->ReleaseFloatArrayElements(samples, pcm, JNI_ABORT);
+
+    jfloatArray resultArray = env->NewFloatArray(result.size());
+    env->SetFloatArrayRegion(resultArray, 0, result.size(), result.data());
+    return resultArray;
+}
+
 } // extern "C"

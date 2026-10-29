@@ -42,3 +42,6 @@ target_link_libraries(whisper
 target_link_libraries(whisper android log)
 target_link_libraries(${CMAKE_PROJECT_NAME}
     whisper)
+
+# Debug builds default to -O0, which makes the mel spectrogram ~10x slower
+target_compile_options(whisper PRIVATE -O3)

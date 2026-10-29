@@ -8,4 +8,5 @@ interface IWhisperEngine {
     @Throws(IOException::class)
     fun initialize(modelPath: String?, vocabPath: String?, multilingual: Boolean): Boolean
     fun transcribeFile(wavePath: String?): String
+    fun transcribeSamples(samples: FloatArray): String
 }

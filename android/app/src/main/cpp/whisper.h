@@ -256,7 +256,10 @@ bool log_mel_spectrogram(const float* samples, const int n_samples, const int sa
 // Log mel spectrogram computation
 bool log_mel_spectrogramJava(const float* samples, const int n_samples, const int sample_rate,
                              const int fft_size, const int fft_step, const int n_mel,
-                             const int n_threads, const std::vector<float> filtersJava, whisper_mel& mel) {
+                             const int n_threads, const std::vector<float> filtersJava, whisper_mel& mel,
+                             int n_samples_real = -1) {
+    // Frames starting past the real audio only see zero padding: their value is always log10(1e-10)
+    if (n_samples_real < 0 || n_samples_real > n_samples) n_samples_real = n_samples;
     std::vector<float> hann;
     hann.resize(fft_size);
 
@@ -287,6 +290,11 @@ bool log_mel_spectrogramJava(const float* samples, const int n_samples, const in
 
             for (int i = ith; i < mel.n_len; i += n_threads) {
                 const int offset = i * fft_step;
+
+                if (offset >= n_samples_real) {
+                    for (int j = 0; j < mel.n_mel; j++) mel.data[j * mel.n_len + i] = -10.0f;
+                    continue;
+                }
 
                 // apply Hanning window
                 for (int j = 0; j < fft_size; j++) {

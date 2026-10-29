@@ -10,6 +10,7 @@ public:
     ~whisperstt() {};
     std::vector<float> transcribeFileWithMel(const char *waveFile, std::vector<float> filters);
     std::vector<float> returnMelSpectrogram(std::vector<float> samples, std::vector<float> filters);
+    std::vector<float> melFromSamples(const float *samples, size_t n, const std::vector<float> &filters);
 
 private:
     // Add any private members or helper functions.

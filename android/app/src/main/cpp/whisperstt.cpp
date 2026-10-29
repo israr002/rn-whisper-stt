@@ -3,6 +3,7 @@
 #include <cstring>
 #include <vector>
 #include <thread>
+#include <algorithm>
 #include <sys/time.h>
 
 #include "whisper.h"
@@ -19,7 +20,8 @@ whisperstt::returnMelSpectrogram(std::vector<float> samples, std::vector<float> 
     gettimeofday(&start_time, NULL);
 
     samples.resize((WHISPER_SAMPLE_RATE * WHISPER_CHUNK_SIZE), 0);
-    const auto processor_count = std::thread::hardware_concurrency();
+    // Cap at 4: on big.LITTLE SoCs the extra threads land on LITTLE cores and slow the whole pass
+    const auto processor_count = std::min(4u, std::max(1u, std::thread::hardware_concurrency()));
     __android_log_print(ANDROID_LOG_INFO, "TRACKERS_mel", "%s", "before");
 
     log_mel_spectrogramJava(samples.data(), samples.size(), WHISPER_SAMPLE_RATE, WHISPER_N_FFT,
@@ -43,4 +45,17 @@ whisperstt::transcribeFileWithMel(const char *waveFile, std::vector<float> filte
     std::vector<float> mel_spectrogram = returnMelSpectrogram(pcmf32, filtersJava);
     __android_log_print(ANDROID_LOG_INFO, "TRACKERS_mel", "%s", "mel-end");
     return mel_spectrogram;
+}
+
+std::vector<float>
+whisperstt::melFromSamples(const float *samples, size_t n, const std::vector<float> &filters) {
+    const size_t n_total = WHISPER_SAMPLE_RATE * WHISPER_CHUNK_SIZE;
+    if (n > n_total) n = n_total;
+    std::vector<float> padded(n_total, 0.0f);
+    std::copy(samples, samples + n, padded.begin());
+
+    const auto n_threads = std::min(4u, std::max(1u, std::thread::hardware_concurrency()));
+    log_mel_spectrogramJava(padded.data(), padded.size(), WHISPER_SAMPLE_RATE, WHISPER_N_FFT,
+                            WHISPER_HOP_LENGTH, WHISPER_N_MEL, n_threads, filters, mel, (int) n);
+    return mel.data;
 }

@@ -112,10 +112,13 @@ class Recorder(private val mContext: Context) {
             audioRecord.stop()
             audioRecord.release()
 
-            // Save 30 seconds of recording buffer in wav file
+            // Save only the recorded audio (up to 30 seconds) in wav file
+            val recorded = ByteArray(totalBytesRead)
+            buffer30Sec.flip()
+            buffer30Sec.get(recorded)
             WaveUtil.createWaveFile(
                 mWavFilePath,
-                buffer30Sec.array(),
+                recorded,
                 sampleRateInHz,
                 channels,
                 bytesPerSample
