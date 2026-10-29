@@ -7,28 +7,16 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.whisperstt.recorder.RecordingService
 import com.whisperstt.recorder.StreamingTranscriber
 import com.whisperstt.whisperengine.IWhisperEngine
 import com.whisperstt.whisperengine.WhisperCppEngine
-import com.whisperstt.whisperengine.WhisperEngine
-import java.io.File
-import java.io.FileOutputStream
-import java.io.IOException
 import java.util.concurrent.Executors
 
 private const val LOG_TAG = "LibWhisper"
 
 class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
-    // TEMP A/B switch for the prototype: write tflite | cpp | cpp-full to
-    // /sdcard/Android/data/com.whisperstt/files/bench_engine (default: cpp)
-    private val engineName = File(reactApplicationContext.getExternalFilesDir(null), "bench_engine")
-        .takeIf { it.exists() }?.readText()?.trim() ?: "cpp"
-
-    private val whisperEngine: IWhisperEngine = when (engineName) {
-        "tflite" -> WhisperEngine(reactApplicationContext)
-        "cpp-full" -> WhisperCppEngine(reactApplicationContext, useAudioCtx = false)
-        else -> WhisperCppEngine(reactApplicationContext)
-    }
+    private val whisperEngine: IWhisperEngine = WhisperCppEngine(reactApplicationContext)
 
     // Single thread: model init, then every transcription job, strictly in order
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "WhisperWorker") }
@@ -39,10 +27,7 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
     init {
         // Load + warm up off the JS thread; recordings queue behind it on the same worker
         worker.execute {
-            copyAssetsWithExtensionsToDataFolder(arrayOf("bin"))
-            val model = if (whisperEngine is WhisperCppEngine) CPP_MODEL_PATH else MODEL_PATH
-            Log.i(LOG_TAG, "Engine: $engineName ($model)")
-            whisperEngine.initialize(model, getFilePath(VOCAB_PATH), false)
+            if (!whisperEngine.initialize(MODEL_PATH)) Log.e(LOG_TAG, "Failed to load $MODEL_PATH")
         }
     }
 
@@ -53,6 +38,7 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
         if (transcriber != null) return
         Log.d(LOG_TAG, "Recording Started")
         synchronized(finalSegments) { finalSegments.clear() }
+        RecordingService.start(reactApplicationContext)
         transcriber = StreamingTranscriber(reactApplicationContext, whisperEngine, worker, listener).also { it.start() }
     }
 
@@ -70,6 +56,8 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
                 promise.resolve(text)
             } catch (e: Exception) {
                 promise.reject("E_TRANSCRIBE", e)
+            } finally {
+                RecordingService.stop(reactApplicationContext)
             }
         }.start()
     }
@@ -105,38 +93,17 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
             .emit(event, payload)
     }
 
-    private fun getFilePath(assetName: String): String = File(reactApplicationContext.filesDir, assetName).absolutePath
-
-    // Copy assets to data folder
-    private fun copyAssetsWithExtensionsToDataFolder(extensions: Array<String>) {
-        val assetManager = reactApplicationContext.assets
-        try {
-            val destFolder = reactApplicationContext.filesDir.absolutePath
-            val assetFiles = assetManager.list("") ?: return
-            for (assetFileName in assetFiles) {
-                if (extensions.none { assetFileName.endsWith(".$it") }) continue
-                val outFile = File(destFolder, assetFileName)
-                if (outFile.exists()) continue
-                assetManager.open(assetFileName).use { input ->
-                    FileOutputStream(outFile).use { output -> input.copyTo(output) }
-                }
-            }
-        } catch (e: IOException) {
-            Log.e(LOG_TAG, "Failed to copy assets", e)
-        }
-    }
-
     override fun invalidate() {
         transcriber?.let { runCatching { it.stop() } }
         transcriber = null
+        RecordingService.stop(reactApplicationContext)
+        worker.execute { whisperEngine.release() }
         worker.shutdown()
         super.invalidate()
     }
 
     companion object {
-        private const val MODEL_PATH = "models/whisper-tiny-en.tflite"
-        private const val CPP_MODEL_PATH = "models/ggml-tiny.en-q8_0.bin"
-        private const val VOCAB_PATH = "filters_vocab_en.bin"
+        private const val MODEL_PATH = "models/ggml-tiny.en-q8_0.bin"
         const val EVENT_TRANSCRIPT = "WhisperTranscript"
         const val EVENT_ERROR = "WhisperError"
     }

@@ -42,12 +42,12 @@ add_subdirectory(src/main/cpp/whisper.cpp)
 add_library( whisperstt
     SHARED
     # List C/C++ source files with relative paths to this CMakeLists.txt.
-    src/main/cpp/whisperstt.cpp src/main/cpp/whispersttJNI.cpp src/main/cpp/whispercppJNI.cpp)
+    src/main/cpp/whispercppJNI.cpp)
 
 target_link_libraries(whisperstt android log whisper)
 target_link_libraries(${CMAKE_PROJECT_NAME} whisperstt)
 
-# Debug builds default to -O0, which makes the mel spectrogram ~10x slower and whisper.cpp unusable
+# Debug builds default to -O0, which makes whisper.cpp ~10x slower
 target_compile_options(whisperstt PRIVATE -O3)
 foreach (t whisper ggml ggml-base ggml-cpu)
     if (TARGET ${t})

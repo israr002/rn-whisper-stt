@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { requestPermission } from './src/utils/permissions';
-import { PERMISSIONS } from 'react-native-permissions';
+import { PERMISSIONS, requestNotifications } from 'react-native-permissions';
 import Record from './src/assets/record.png';
 import RecordingWaves from './src/components/RecordingWaves';
 
@@ -71,6 +71,10 @@ function App(): React.JSX.Element {
       );
       if (!hasPermission) {
         return;
+      }
+      if (Platform.OS === 'android') {
+        // Lets the "Transcribing" notification show; recording works without it
+        await requestNotifications([]).catch(() => {});
       }
       session.current += 1;
       setRecording(true);

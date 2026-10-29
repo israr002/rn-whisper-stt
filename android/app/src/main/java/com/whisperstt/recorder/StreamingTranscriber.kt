@@ -33,16 +33,18 @@ class StreamingTranscriber(
     private val config: Config = Config(),
 ) {
     data class Config(
-        val speechThreshold: Float = 0.5f,
-        val silenceThreshold: Float = 0.35f,  // hysteresis: below this counts as silence
+        // Silero's default is 0.5; quiet words after a pause (far-field, fan noise) scored just under it
+        val speechThreshold: Float = 0.45f,
+        val silenceThreshold: Float = 0.3f,   // hysteresis: below this counts as silence
         val endSilenceMs: Int = 700,          // pause that ends an utterance
         val minUtteranceMs: Int = 1000,       // shorter utterances wait to merge with the next one...
         val maxHoldSilenceMs: Int = 2000,     // ...unless the pause is this long
-        val minSpeechMs: Int = 250,           // below this it's treated as noise and dropped
+        val minSpeechMs: Int = 250,           // below this it's not transcribed on its own...
+        val carryWindowMs: Int = 2000,        // ...but joins the next utterance if that starts this soon
         val maxUtteranceMs: Int = 20_000,     // force a cut; Whisper's window is 30s
-        val preRollMs: Int = 320,             // audio kept from before speech onset
+        val preRollMs: Int = 800,             // audio kept from before speech onset (catches soft starts)
         val livePartials: Boolean = true,
-        val partialIntervalMs: Int = 1500,
+        val partialIntervalMs: Int = 600,     // whisper.cpp runs take ~100-400ms on mid-range phones
         // Start transcribing this soon after speech stops; reused as the final if no more speech comes
         val speculativeSilenceMs: Int = 200,
     )
@@ -136,8 +138,17 @@ class StreamingTranscriber(
         private var speechEnd = 0          // audio length right after the last speech chunk
         private var submittedSpeechEnd = -1
 
+        // A too-short burst (e.g. "ask not" under noise) waiting to be prepended to the next utterance
+        private var carry: FloatArray? = null
+        private var carrySpeechMs = 0
+        private var chunksSinceCarry = 0
+
         fun push(frame: FloatArray, prob: Float) {
             if (!active) {
+                if (carry != null && ++chunksSinceCarry * chunkMs > config.carryWindowMs) {
+                    Log.d(TAG, "Dropped ${carrySpeechMs}ms speech burst (nothing followed)")
+                    carry = null
+                }
                 if (prob >= config.speechThreshold) {
                     active = true
                     inSpeech = true
@@ -148,6 +159,12 @@ class StreamingTranscriber(
                     speechEnd = 0
                     submittedSpeechEnd = -1
                     lastPartialAt = SystemClock.elapsedRealtime()
+                    carry?.let {
+                        Log.d(TAG, "#$segmentId starts with a carried ${carrySpeechMs}ms burst")
+                        append(it)
+                        speechMs = carrySpeechMs
+                        carry = null
+                    }
                     preRoll.forEach { append(it) }
                     preRoll.clear()
                 } else {
@@ -201,7 +218,13 @@ class StreamingTranscriber(
             if (!active) return
             active = false
             if (speechMs < config.minSpeechMs) {
-                // Noise blip; let the UI drop any partial it showed for this id
+                // Too short to transcribe alone. Keep it in case more speech follows; the UI
+                // drops any partial it showed for this id
+                if (!force) {
+                    carry = audio.copyOf(trimmedEnd().coerceIn(1, length))
+                    carrySpeechMs = speechMs
+                    chunksSinceCarry = 0
+                }
                 if (config.livePartials) listener.onTranscript(segmentId, "", true, 0, 0)
                 return
             }

@@ -2,8 +2,7 @@
 #include <string>
 #include <android/log.h>
 
-// whisper.cpp's public header (the local "whisper.h" belongs to the TFLite pipeline)
-#include "whisper.cpp/include/whisper.h"
+#include "whisper.h"
 
 #define TAG "WhisperCpp"
 
@@ -44,8 +43,12 @@ Java_com_whisperstt_whisperengine_WhisperCppEngine_nativeTranscribe(JNIEnv *env,
     params.print_special = false;
     params.print_timestamps = false;
     params.suppress_blank = true;
+    params.suppress_nst = true;      // no "(music)", "[noise]"-style tokens on background noise
     params.audio_ctx = audioCtx;     // 0 = full 30s window
-    params.temperature_inc = 0.0f;   // no fallback re-decodes: keeps latency predictable
+    // On repetitive/low-confidence output (entropy_thold, logprob_thold) re-decode at a higher
+    // temperature. Only the decoder re-runs, so it's much cheaper than re-encoding with a wider window
+    params.temperature_inc = 0.4f;   // at most 2 fallbacks (0.4, 0.8): bounds the worst case
+    params.greedy.best_of = 1;
     params.max_tokens = maxTokens;   // bounds the cost of a repetition loop
 
     jsize n = env->GetArrayLength(samples);

@@ -1,12 +1,12 @@
 package com.whisperstt.whisperengine
 
-import java.io.IOException
-
 interface IWhisperEngine {
     val isInitialized: Boolean
 
-    @Throws(IOException::class)
-    fun initialize(modelPath: String?, vocabPath: String?, multilingual: Boolean): Boolean
-    fun transcribeFile(wavePath: String?): String
+    fun initialize(modelPath: String): Boolean
+
+    // 16kHz mono PCM in [-1, 1]; at most 30s is used
     fun transcribeSamples(samples: FloatArray): String
+
+    fun release()
 }
