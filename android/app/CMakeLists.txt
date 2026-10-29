@@ -26,22 +26,31 @@ include(${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
 # System.loadLibrary() and pass the name of the library defined here;
 # for GameActivity/NativeActivity derived applications, the same library name must be
 # used in the AndroidManifest.xml file.
-add_library( whisper 
+# whisper.cpp (MIT, https://github.com/ggml-org/whisper.cpp), git submodule pinned to v1.9.5
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(WHISPER_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(GGML_NATIVE OFF CACHE BOOL "" FORCE)
+set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+if (ANDROID_ABI STREQUAL "arm64-v8a")
+    # dotprod + fp16 are available on every Cortex-A55/A75 and newer core
+    set(GGML_CPU_ARM_ARCH "armv8.2-a+dotprod+fp16" CACHE STRING "" FORCE)
+endif ()
+add_subdirectory(src/main/cpp/whisper.cpp)
+
+add_library( whisperstt
     SHARED
     # List C/C++ source files with relative paths to this CMakeLists.txt.
-    src/main/cpp/whisperstt.cpp src/main/cpp/whispersttJNI.cpp)
+    src/main/cpp/whisperstt.cpp src/main/cpp/whispersttJNI.cpp src/main/cpp/whispercppJNI.cpp)
 
-# Specifies libraries CMake should link to your target library. You
-# can link libraries from various origins, such as libraries defined in this
-# build script, prebuilt third-party libraries, or Android system libraries.
-target_link_libraries(whisper
-    # List libraries link to the target library
-    android
-    log)
+target_link_libraries(whisperstt android log whisper)
+target_link_libraries(${CMAKE_PROJECT_NAME} whisperstt)
 
-target_link_libraries(whisper android log)
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    whisper)
-
-# Debug builds default to -O0, which makes the mel spectrogram ~10x slower
-target_compile_options(whisper PRIVATE -O3)
+# Debug builds default to -O0, which makes the mel spectrogram ~10x slower and whisper.cpp unusable
+target_compile_options(whisperstt PRIVATE -O3)
+foreach (t whisper ggml ggml-base ggml-cpu)
+    if (TARGET ${t})
+        target_compile_options(${t} PRIVATE -O3)
+    endif ()
+endforeach ()

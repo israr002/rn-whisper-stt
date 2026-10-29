@@ -9,6 +9,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import com.whisperstt.recorder.StreamingTranscriber
 import com.whisperstt.whisperengine.IWhisperEngine
+import com.whisperstt.whisperengine.WhisperCppEngine
 import com.whisperstt.whisperengine.WhisperEngine
 import java.io.File
 import java.io.FileOutputStream
@@ -18,7 +19,16 @@ import java.util.concurrent.Executors
 private const val LOG_TAG = "LibWhisper"
 
 class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
-    private val whisperEngine: IWhisperEngine = WhisperEngine(reactApplicationContext)
+    // TEMP A/B switch for the prototype: write tflite | cpp | cpp-full to
+    // /sdcard/Android/data/com.whisperstt/files/bench_engine (default: cpp)
+    private val engineName = File(reactApplicationContext.getExternalFilesDir(null), "bench_engine")
+        .takeIf { it.exists() }?.readText()?.trim() ?: "cpp"
+
+    private val whisperEngine: IWhisperEngine = when (engineName) {
+        "tflite" -> WhisperEngine(reactApplicationContext)
+        "cpp-full" -> WhisperCppEngine(reactApplicationContext, useAudioCtx = false)
+        else -> WhisperCppEngine(reactApplicationContext)
+    }
 
     // Single thread: model init, then every transcription job, strictly in order
     private val worker = Executors.newSingleThreadExecutor { Thread(it, "WhisperWorker") }
@@ -30,7 +40,9 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
         // Load + warm up off the JS thread; recordings queue behind it on the same worker
         worker.execute {
             copyAssetsWithExtensionsToDataFolder(arrayOf("bin"))
-            whisperEngine.initialize(MODEL_PATH, getFilePath(VOCAB_PATH), false)
+            val model = if (whisperEngine is WhisperCppEngine) CPP_MODEL_PATH else MODEL_PATH
+            Log.i(LOG_TAG, "Engine: $engineName ($model)")
+            whisperEngine.initialize(model, getFilePath(VOCAB_PATH), false)
         }
     }
 
@@ -123,6 +135,7 @@ class WhisperModule(reactContext: ReactApplicationContext) : ReactContextBaseJav
 
     companion object {
         private const val MODEL_PATH = "models/whisper-tiny-en.tflite"
+        private const val CPP_MODEL_PATH = "models/ggml-tiny.en-q8_0.bin"
         private const val VOCAB_PATH = "filters_vocab_en.bin"
         const val EVENT_TRANSCRIPT = "WhisperTranscript"
         const val EVENT_ERROR = "WhisperError"

@@ -151,7 +151,7 @@ class WhisperEngine(private val context: Context) : IWhisperEngine {
         }
 
         init {
-            System.loadLibrary("whisper")
+            System.loadLibrary("whisperstt")
         }
     }
 }
