@@ -31,5 +31,14 @@ target 'WhisperSttExample' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # RN 0.78's fmt 11 uses consteval format checks that newer Apple Clang (Xcode 16.3+ / 26.x)
+    # rejects. fmt only enables them under C++20, so build that one pod as C++17.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+      target.build_configurations.each do |build_config|
+        build_config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
   end
 end
