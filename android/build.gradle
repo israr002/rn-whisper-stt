@@ -1,21 +1,55 @@
-buildscript {
-    ext {
-        buildToolsVersion = "35.0.0"
-        minSdkVersion = 24
-        compileSdkVersion = 35
-        targetSdkVersion = 35
-        ndkVersion = "27.1.12297006"
-        kotlinVersion = "2.0.21"
-    }
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath("com.android.tools.build:gradle")
-        classpath("com.facebook.react:react-native-gradle-plugin")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
-    }
+ext.WhisperStt = [
+  minSdkVersion: 24,
+  compileSdkVersion: 36
+]
+
+ext.getExtOrDefault = { prop ->
+  if (rootProject.ext.has(prop)) {
+    return rootProject.ext.get(prop)
+  }
+
+  return WhisperStt[prop]
 }
 
-apply plugin: "com.facebook.react.rootproject"
+
+apply plugin: "com.android.library"
+
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "kotlin-android"
+}
+
+
+apply plugin: "com.facebook.react"
+
+android {
+  namespace "com.whisperstt"
+
+  compileSdkVersion getExtOrDefault("compileSdkVersion")
+  if (rootProject.ext.has("ndkVersion")) {
+    ndkVersion rootProject.ext.get("ndkVersion")
+  }
+
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion")
+
+    externalNativeBuild {
+      cmake {
+        // Match React Native's STL so only one libc++_shared.so ends up in the app
+        arguments "-DANDROID_STL=c++_shared"
+      }
+    }
+  }
+
+  externalNativeBuild {
+    cmake {
+      path "CMakeLists.txt"
+    }
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  implementation "androidx.core:core:1.13.1"
+  // Silero VAD
+  implementation "com.microsoft.onnxruntime:onnxruntime-android:1.20.0"
+}

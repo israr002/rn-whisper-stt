@@ -1,40 +1,160 @@
 {
-  "name": "whisperstt",
-  "version": "0.0.1",
-  "private": true,
-  "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
-    "lint": "eslint .",
-    "start": "react-native start",
-    "test": "jest"
+  "name": "react-native-whisper-stt",
+  "version": "0.1.0",
+  "description": "Real-time, on-device speech-to-text for React Native with whisper.cpp",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "react-native-whisper-stt-source": "./src/index.tsx",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./package.json": "./package.json"
   },
-  "dependencies": {
-    "react": "19.0.0",
-    "react-native": "0.78.0",
-    "react-native-permissions": "^5.2.6"
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "cpp",
+    "!cpp/whisper.cpp/examples",
+    "!cpp/whisper.cpp/models",
+    "!cpp/whisper.cpp/tests",
+    "!cpp/whisper.cpp/bindings",
+    "!cpp/whisper.cpp/samples",
+    "!cpp/whisper.cpp/scripts",
+    "!cpp/whisper.cpp/media",
+    "!cpp/whisper.cpp/ci",
+    "!cpp/whisper.cpp/grammars",
+    "!cpp/whisper.cpp/ggml/src/ggml-cuda",
+    "!cpp/whisper.cpp/ggml/src/ggml-vulkan",
+    "!cpp/whisper.cpp/ggml/src/ggml-sycl",
+    "!cpp/whisper.cpp/ggml/src/ggml-cann",
+    "!cpp/whisper.cpp/ggml/src/ggml-musa",
+    "!cpp/whisper.cpp/ggml/src/ggml-hip",
+    "!cpp/whisper.cpp/ggml/src/ggml-opencl",
+    "!cpp/whisper.cpp/ggml/src/ggml-kompute",
+    "!cpp/whisper.cpp/ggml/src/ggml-rpc",
+    "!cpp/whisper.cpp/ggml/src/ggml-webgpu",
+    "!cpp/whisper.cpp/ggml/src/ggml-zdnn",
+    "!cpp/whisper.cpp/ggml/src/ggml-openvino",
+    "!cpp/whisper.cpp/ggml/src/ggml-virtgpu",
+    "!cpp/whisper.cpp/ggml/src/ggml-hexagon",
+    "!cpp/whisper.cpp/ggml/src/ggml-zendnn",
+    "!cpp/whisper.cpp/ggml/src/ggml-et",
+    "*.podspec",
+    "react-native.config.js",
+    "!ios/build",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "example": "yarn workspace react-native-whisper-stt-example",
+    "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
+    "prepare": "bob build",
+    "typecheck": "tsc",
+    "lint": "eslint \"**/*.{js,ts,tsx}\""
+  },
+  "keywords": [
+    "react-native",
+    "whisper",
+    "whisper.cpp",
+    "speech-to-text",
+    "stt",
+    "speech-recognition",
+    "transcription",
+    "on-device",
+    "offline",
+    "real-time",
+    "android"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/israr002/rn-whisper-stt.git"
+  },
+  "author": "Israr Khan <israr002khan@gmail.com> (https://github.com/israr002)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/israr002/rn-whisper-stt/issues"
+  },
+  "homepage": "https://github.com/israr002/rn-whisper-stt#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.2",
-    "@babel/preset-env": "^7.25.3",
-    "@babel/runtime": "^7.25.0",
-    "@react-native-community/cli": "15.0.1",
-    "@react-native-community/cli-platform-android": "15.0.1",
-    "@react-native-community/cli-platform-ios": "15.0.1",
+    "@eslint/compat": "^2.1.1",
+    "@eslint/eslintrc": "^3.3.7",
+    "@eslint/js": "^9.39.5",
     "@react-native/babel-preset": "0.78.0",
     "@react-native/eslint-config": "0.78.0",
-    "@react-native/metro-config": "0.78.0",
-    "@react-native/typescript-config": "0.78.0",
-    "@types/jest": "^29.5.13",
     "@types/react": "^19.0.0",
-    "@types/react-test-renderer": "^19.0.0",
-    "eslint": "^8.19.0",
-    "jest": "^29.6.3",
-    "prettier": "2.8.8",
-    "react-test-renderer": "19.0.0",
-    "typescript": "5.0.4"
+    "del-cli": "^8.0.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-ft-flow": "^3.0.11",
+    "eslint-plugin-prettier": "^5.5.7",
+    "prettier": "^3.9.10",
+    "react": "19.0.0",
+    "react-native": "0.78.0",
+    "react-native-builder-bob": "^0.44.1",
+    "turbo": "^2.11.10",
+    "typescript": "^6.0.3"
   },
-  "engines": {
-    "node": ">=18"
+  "peerDependencies": {
+    "react": "*",
+    "react-native": "*"
+  },
+  "workspaces": [
+    "example"
+  ],
+  "packageManager": "yarn@4.18.1",
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "WhisperSttSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.whisperstt"
+    }
+  },
+  "prettier": {
+    "quoteProps": "consistent",
+    "singleQuote": true,
+    "tabWidth": 2,
+    "trailingComma": "es5",
+    "useTabs": false
+  },
+  "create-react-native-library": {
+    "type": "turbo-module",
+    "languages": "kotlin-objc",
+    "tools": [
+      "eslint"
+    ],
+    "version": "0.64.0"
   }
 }
