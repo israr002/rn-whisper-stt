@@ -14,10 +14,10 @@
 static const int kSampleRate = 16000;
 static const int kMaxAudioCtx = 1500; // 30 s
 // Extra encoder positions beyond the audio; too tight a window makes whisper loop or drop words.
-// On Metal a wider window costs almost nothing (iPhone 13 Pro: 256 -> 468 positions, 120 -> 126 ms)
-// and the tight one looped on ~1 in 3 utterances, so GPU runs start wide; CPU runs pay per position.
-static const int kGpuAudioCtxPadding = 256;
-static const int kCpuAudioCtxPadding = 64;
+// Same on Metal and CPU. A wider window (256) is nearly free on Metal and loops less, but it
+// changed the text: on identical iPhone 13 Pro captures it dropped leading words ("ask what you
+// can do" -> "what you can do") on CPU and GPU alike. Loops are caught and retried instead.
+static const int kAudioCtxPadding = 64;
 // Short utterances loop most often with a tight window; never go below this (256 = 5 s)
 static const int kMinAudioCtx = 256;
 
@@ -42,7 +42,9 @@ static NSString *Trimmed(const std::string &text);
 static struct whisper_context *LoadContext(NSString *path, bool gpu) {
   struct whisper_context_params cparams = whisper_context_default_params();
   cparams.use_gpu = gpu;
-  cparams.flash_attn = gpu;
+  // No flash attention: with it, Metal output differed from the CPU's on 1 of 8 captured segments
+  // (4 of 8 combined with a wide audio_ctx); without it the two matched on all 8, for ~25% more time
+  cparams.flash_attn = false;
   CFAbsoluteTime t = CFAbsoluteTimeGetCurrent();
   struct whisper_context *ctx = whisper_init_from_file_with_params(path.fileSystemRepresentation, cparams);
   NSLog(@"[WhisperStt] loaded %s context in %.0fms", gpu ? "Metal" : "CPU", (CFAbsoluteTimeGetCurrent() - t) * 1000);
@@ -176,7 +178,7 @@ static struct whisper_context *LoadContext(NSString *path, bool gpu) {
 
   // A reduced audio_ctx occasionally sends the decoder into a repetition loop; retry with
   // progressively wider windows, then the full one. Encoder positions: one per 320 samples
-  const int padding = gpu ? kGpuAudioCtxPadding : kCpuAudioCtxPadding;
+  const int padding = kAudioCtxPadding;
   for (int audioCtx : {MAX(kMinAudioCtx, MIN(kMaxAudioCtx, count / 320 + padding)),
                        MAX(kMinAudioCtx, MIN(kMaxAudioCtx, count / 320 + padding * 4)), 0}) {
     std::string text;
