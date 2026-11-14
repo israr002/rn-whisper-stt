@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  FlatList,
   Image,
   PermissionsAndroid,
   Platform,
+  SafeAreaView,
+  ScrollView,
+  Settings,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,28 +17,32 @@ import {
   addTranscriptListener,
   downloadModel,
   init,
+  requestMicrophonePermission,
   startRecording,
   stopRecording,
 } from 'react-native-whisper-stt';
 import Record from './record.png';
 import RecordingWaves from './components/RecordingWaves';
 
-type Segment = { key: string; text: string; isFinal: boolean };
+type Segment = {
+  key: string;
+  session: number;
+  text: string;
+  isFinal: boolean;
+};
+
+// base.en (~82 MB) handles names and accents much better than tiny.en (~44 MB)
+const MODEL = 'base.en';
 
 async function requestPermissions(): Promise<boolean> {
-  if (Platform.OS !== 'android') {
-    return true;
-  }
-  const mic = await PermissionsAndroid.request(
-    PermissionsAndroid.PERMISSIONS.RECORD_AUDIO
-  );
-  if (Platform.Version >= 33) {
+  const mic = await requestMicrophonePermission();
+  if (Platform.OS === 'android' && Platform.Version >= 33) {
     // Lets the "Transcribing" notification show; recording works without it
     await PermissionsAndroid.request(
       PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
     );
   }
-  return mic === PermissionsAndroid.RESULTS.GRANTED;
+  return mic;
 }
 
 function App(): React.JSX.Element {
@@ -45,13 +51,13 @@ function App(): React.JSX.Element {
   const [recording, setRecording] = useState(false);
   const [segments, setSegments] = useState<Segment[]>([]);
   const session = useRef(0);
-  const list = useRef<FlatList<Segment>>(null);
+  const scroll = useRef<ScrollView>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        // Downloads once (~44 MB), then loads from app storage
-        await downloadModel('tiny.en', (e) =>
+        // Downloads once, then loads from app storage
+        await downloadModel(MODEL, (e) =>
           setStatus(
             e.progress >= 0
               ? `Downloading model… ${Math.round(e.progress * 100)}%`
@@ -59,7 +65,7 @@ function App(): React.JSX.Element {
           )
         );
         setStatus('Loading model…');
-        await init({ model: 'tiny.en' });
+        await init({ model: MODEL });
         setStatus('');
         setReady(true);
       } catch (e: any) {
@@ -78,7 +84,12 @@ function App(): React.JSX.Element {
           return rest;
         }
         const index = prev.findIndex((s) => s.key === key);
-        const next = { key, text: e.text, isFinal: e.isFinal };
+        const next = {
+          key,
+          session: session.current,
+          text: e.text,
+          isFinal: e.isFinal,
+        };
         if (index === -1) {
           return [...prev, next];
         }
@@ -94,6 +105,31 @@ function App(): React.JSX.Element {
       errSub.remove();
     };
   }, []);
+
+  // Test hook for headless simulator runs: launch with `-autoRecordSeconds 15` (iOS launch arguments
+  // are readable through Settings) to record for that long without tapping
+  useEffect(() => {
+    const seconds =
+      Platform.OS === 'ios' ? Number(Settings.get('autoRecordSeconds')) : 0;
+    if (!ready || !(seconds > 0)) {
+      return;
+    }
+    session.current += 1;
+    setRecording(true);
+    requestPermissions()
+      .then(() => startRecording())
+      .then(
+        () =>
+          new Promise<void>((resolve) => setTimeout(resolve, seconds * 1000))
+      )
+      .then(() => stopRecording())
+      .then((text) => console.log('transcribedText', text))
+      .catch((e) => {
+        console.error('autoRecord failed', e?.message, e?.stack);
+        setStatus(`Failed: ${e.message}`);
+      })
+      .finally(() => setRecording(false));
+  }, [ready]);
 
   const toggleRecording = async () => {
     if (!ready) {
@@ -113,6 +149,7 @@ function App(): React.JSX.Element {
     session.current += 1;
     setRecording(true);
     try {
+      // Optional: startRecording({ prompt: 'Israr Khan, Zerodha' }) nudges Whisper towards names it may misspell
       await startRecording();
     } catch (e: any) {
       setRecording(false);
@@ -121,7 +158,7 @@ function App(): React.JSX.Element {
   };
 
   return (
-    <View style={styles.mainContainer}>
+    <SafeAreaView style={styles.mainContainer}>
       <StatusBar barStyle={'dark-content'} backgroundColor={'white'} />
       <View style={styles.container}>
         <View style={styles.recorderContainer}>
@@ -139,29 +176,35 @@ function App(): React.JSX.Element {
           </TouchableOpacity>
           {status ? <Text style={styles.status}>{status}</Text> : null}
         </View>
-        <FlatList
-          ref={list}
-          data={segments}
-          keyExtractor={(item) => item.key}
-          contentContainerStyle={styles.listContainer}
+        {/* One running transcript: utterances flow on as sentences, each recording is a paragraph */}
+        <ScrollView
+          ref={scroll}
+          contentContainerStyle={styles.transcriptContainer}
           onContentSizeChange={() =>
-            list.current?.scrollToEnd({ animated: true })
+            scroll.current?.scrollToEnd({ animated: true })
           }
-          renderItem={({ item }) => (
-            <View style={styles.listItem}>
-              <Text
-                style={[
-                  styles.listItemText,
-                  !item.isFinal && styles.partialText,
-                ]}
-              >
-                {item.text}
-              </Text>
-            </View>
-          )}
-        />
+        >
+          <Text style={styles.transcript}>
+            {segments.map((item, i) => {
+              const prev = segments[i - 1];
+              const separator = !prev
+                ? ''
+                : prev.session !== item.session
+                  ? '\n\n'
+                  : ' ';
+              return (
+                <Text
+                  key={item.key}
+                  style={!item.isFinal ? styles.partialText : undefined}
+                >
+                  {separator + item.text}
+                </Text>
+              );
+            })}
+          </Text>
+        </ScrollView>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -206,20 +249,14 @@ const styles = StyleSheet.create({
     width: 20,
     backgroundColor: 'white',
   },
-  listContainer: {
-    flexGrow: 1,
+  transcriptContainer: {
+    paddingHorizontal: 20,
     paddingVertical: 10,
   },
-  listItem: {
-    marginHorizontal: 20,
-    borderBottomWidth: 1,
-    borderColor: 'rgba(0,0,0,0.2)',
-    paddingVertical: 10,
-  },
-  listItemText: {
+  transcript: {
     color: 'black',
-    textAlign: 'center',
-    fontSize: 16,
+    fontSize: 17,
+    lineHeight: 26,
   },
   partialText: {
     color: 'gray',

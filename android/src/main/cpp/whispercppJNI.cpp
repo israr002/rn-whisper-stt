@@ -28,7 +28,7 @@ Java_com_whisperstt_whisperengine_WhisperCppEngine_nativeFree(JNIEnv *env, jobje
 JNIEXPORT jbyteArray JNICALL
 Java_com_whisperstt_whisperengine_WhisperCppEngine_nativeTranscribe(JNIEnv *env, jobject thiz, jlong ptr,
                                                                     jfloatArray samples, jint nThreads,
-                                                                    jint audioCtx, jint maxTokens) {
+                                                                    jint audioCtx, jint maxTokens, jstring prompt) {
     auto *ctx = reinterpret_cast<whisper_context *>(ptr);
 
     whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
@@ -50,6 +50,14 @@ Java_com_whisperstt_whisperengine_WhisperCppEngine_nativeTranscribe(JNIEnv *env,
     params.temperature_inc = 0.4f;   // at most 2 fallbacks (0.4, 0.8): bounds the worst case
     params.greedy.best_of = 1;
     params.max_tokens = maxTokens;   // bounds the cost of a repetition loop
+    // Vocabulary hint; whisper.cpp adds it after no_context clears the history
+    std::string promptText;
+    if (prompt) {
+        const char *chars = env->GetStringUTFChars(prompt, nullptr);
+        promptText = chars;
+        env->ReleaseStringUTFChars(prompt, chars);
+        params.initial_prompt = promptText.c_str();
+    }
 
     jsize n = env->GetArrayLength(samples);
     jfloat *pcm = env->GetFloatArrayElements(samples, nullptr);

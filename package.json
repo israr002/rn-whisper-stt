@@ -17,6 +17,8 @@
     "lib",
     "android",
     "ios",
+    "scripts/build-ios-whisper.sh",
+    "!ios/build-whisper",
     "cpp",
     "!cpp/whisper.cpp/examples",
     "!cpp/whisper.cpp/models",
@@ -59,9 +61,10 @@
   "scripts": {
     "example": "yarn workspace react-native-whisper-stt-example",
     "clean": "del-cli android/build example/android/build example/android/app/build example/ios/build lib",
-    "prepare": "bob build",
+    "prepare": "bob build && scripts/build-ios-whisper.sh",
     "typecheck": "tsc",
-    "lint": "eslint \"**/*.{js,ts,tsx}\""
+    "lint": "eslint \"**/*.{js,ts,tsx}\"",
+    "build:ios-whisper": "scripts/build-ios-whisper.sh --force"
   },
   "keywords": [
     "react-native",

@@ -9,6 +9,7 @@ import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.modules.core.PermissionAwareActivity
 import com.whisperstt.recorder.RecordingService
 import com.whisperstt.recorder.StreamingTranscriber
 import com.whisperstt.whisperengine.IWhisperEngine
@@ -139,6 +140,20 @@ class WhisperSttModule(reactContext: ReactApplicationContext) :
 
   override fun isRecording(): Boolean = transcriber != null
 
+  override fun requestMicrophonePermission(promise: Promise) {
+    val permission = Manifest.permission.RECORD_AUDIO
+    if (ContextCompat.checkSelfPermission(reactApplicationContext, permission) == PackageManager.PERMISSION_GRANTED) {
+      return promise.resolve(true)
+    }
+    val activity = reactApplicationContext.currentActivity as? PermissionAwareActivity
+      ?: return promise.reject(E_PERMISSION, "No activity to request the microphone permission from")
+    activity.requestPermissions(arrayOf(permission), PERMISSION_REQUEST_CODE) { requestCode, _, results ->
+      if (requestCode != PERMISSION_REQUEST_CODE) return@requestPermissions false
+      promise.resolve(results.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+      true
+    }
+  }
+
   // Required by NativeEventEmitter
   override fun addListener(eventName: String) {}
   override fun removeListeners(count: Double) {}
@@ -174,6 +189,7 @@ class WhisperSttModule(reactContext: ReactApplicationContext) :
       preRollMs = o.number("preRollMs")?.toInt() ?: d.preRollMs,
       livePartials = o.bool("livePartials") ?: d.livePartials,
       partialIntervalMs = o.number("partialIntervalMs")?.toInt() ?: d.partialIntervalMs,
+      prompt = o.string("prompt")?.takeIf { it.isNotBlank() },
     )
   }
 
@@ -211,5 +227,7 @@ class WhisperSttModule(reactContext: ReactApplicationContext) :
     const val E_PERMISSION = "E_PERMISSION"
     const val E_ALREADY_RECORDING = "E_ALREADY_RECORDING"
     const val E_RECORDING = "E_RECORDING"
+
+    private const val PERMISSION_REQUEST_CODE = 4502
   }
 }

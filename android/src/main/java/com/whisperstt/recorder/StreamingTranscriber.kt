@@ -47,6 +47,7 @@ class StreamingTranscriber(
         val partialIntervalMs: Int = 600,     // whisper.cpp runs take ~100-400ms on mid-range phones
         // Start transcribing this soon after speech stops; reused as the final if no more speech comes
         val speculativeSilenceMs: Int = 200,
+        val prompt: String? = null,           // vocabulary hint passed to every whisper run
     )
 
     interface Listener {
@@ -252,7 +253,7 @@ class StreamingTranscriber(
             try {
                 // A partial that already covered every speech chunk is as good as a fresh run
                 val reuse = isFinal && cachedId == segmentId && cachedSpeechEnd >= speechEnd
-                val text = if (reuse) cachedText else engine.transcribeSamples(samples).trim()
+                val text = if (reuse) cachedText else engine.transcribeSamples(samples, config.prompt).trim()
                 cachedId = segmentId
                 cachedSpeechEnd = speechEnd
                 cachedText = text

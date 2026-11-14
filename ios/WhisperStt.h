@@ -1,5 +1,6 @@
+#import <React/RCTEventEmitter.h>
 #import <WhisperSttSpec/WhisperSttSpec.h>
 
-@interface WhisperStt : NSObject <NativeWhisperSttSpec>
+@interface WhisperStt : RCTEventEmitter <NativeWhisperSttSpec>
 
 @end
