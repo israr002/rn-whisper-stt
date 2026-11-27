@@ -5,12 +5,12 @@ Real-time, on-device speech-to-text for React Native, powered by [whisper.cpp](h
 - **Live transcription**: text appears while people speak and is finalized at each pause
 - **On-device and offline**: audio never leaves the phone
 - **Built for long sessions**: keeps transcribing with the app in the background or the screen locked, on Android and iOS
-- **Fast**: ~70–180 ms per utterance on an iPhone 13 Pro (Metal GPU), ~100–400 ms on a mid-range Android phone
+- **Fast**: ~90–190 ms per utterance on an iPhone 13 Pro (Metal GPU), ~100–400 ms on a mid-range Android phone
 - **iOS and Android**, React Native New Architecture (TurboModule)
 
 ## Demo
 
-https://github.com/user-attachments/assets/bbb57d6b-c9cf-4b9d-b64a-01a47f43ae30
+https://github.com/user-attachments/assets/134a7868-885d-4644-bd26-a916ac317769
 
 ## How it works
 
@@ -163,7 +163,7 @@ Some manufacturers (for example vivo) confine background apps to the slow CPU co
 
 | | iPhone 13 Pro, `base.en` | vivo V2231 (Dimensity 7200), `tiny.en` |
 |---|---|---|
-| Whisper run per utterance | ~70–180 ms (Metal) | ~100–400 ms (CPU) |
+| Whisper run per utterance | ~90–190 ms (Metal) | ~100–400 ms (CPU) |
 | Same, app in background | ~80–290 ms (CPU, measured with `tiny.en`) | ~100–400 ms |
 | Final text after the speaker stops | ~0–0.2 s | ~0–0.5 s |
 | Model load + warm-up | ~0.4 s | ~0.2 s |
