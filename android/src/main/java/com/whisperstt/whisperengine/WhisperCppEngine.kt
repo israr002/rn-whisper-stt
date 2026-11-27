@@ -30,24 +30,24 @@ class WhisperCppEngine(
         return true
     }
 
-    override fun transcribeSamples(samples: FloatArray): String {
+    override fun transcribeSamples(samples: FloatArray, prompt: String?): String {
         // A reduced audio_ctx occasionally sends the decoder into a repetition loop;
         // retry with progressively wider windows (the full window never looped in testing)
         // Encoder positions: one per 2 mel frames = one per 320 samples; 1500 = 30s
         for (padding in listOf(audioCtxPadding, audioCtxPadding * 4)) {
-            val text = run(samples, (samples.size / 320 + padding).coerceIn(minAudioCtx, MAX_AUDIO_CTX))
+            val text = run(samples, (samples.size / 320 + padding).coerceIn(minAudioCtx, MAX_AUDIO_CTX), prompt)
             if (!looksLikeLoop(text, samples.size)) return text
             Log.w(TIMING_TAG, "repetition with padding=$padding, retrying: $text")
         }
-        return run(samples, 0)
+        return run(samples, 0, prompt)
     }
 
-    private fun run(samples: FloatArray, audioCtx: Int): String {
+    private fun run(samples: FloatArray, audioCtx: Int, prompt: String?): String {
         val t0 = SystemClock.elapsedRealtime()
         // ~3 words/s of speech is ~4 tokens/s; 6/s plus slack leaves room for fast talkers
         val maxTokens = 16 + samples.size * 6 / SAMPLE_RATE
         val threads = threadsForNow()
-        val text = String(nativeTranscribe(ctx, samples, threads, audioCtx, maxTokens), Charsets.UTF_8)
+        val text = String(nativeTranscribe(ctx, samples, threads, audioCtx, maxTokens, prompt?.takeIf { it.isNotBlank() }), Charsets.UTF_8)
         Log.i(TIMING_TAG, "audio=${samples.size / 16}ms total=${SystemClock.elapsedRealtime() - t0}ms audio_ctx=$audioCtx threads=$threads")
         return text
     }
@@ -81,7 +81,7 @@ class WhisperCppEngine(
 
     private external fun nativeInit(modelPath: String): Long
     private external fun nativeFree(ptr: Long)
-    private external fun nativeTranscribe(ptr: Long, samples: FloatArray, nThreads: Int, audioCtx: Int, maxTokens: Int): ByteArray
+    private external fun nativeTranscribe(ptr: Long, samples: FloatArray, nThreads: Int, audioCtx: Int, maxTokens: Int, prompt: String?): ByteArray
 
     companion object {
         private const val TIMING_TAG = "WhisperTiming"

@@ -90,6 +90,7 @@ GEM
     rexml (3.4.4)
     ruby-macho (2.5.1)
     securerandom (0.4.1)
+    tsort (0.2.0)
     typhoeus (1.7.1)
       ethon (>= 0.19.1, < 0.20.0)
     tzinfo (2.0.6)
@@ -114,6 +115,7 @@ DEPENDENCIES
   logger
   mutex_m
   nkf
+  tsort
   xcodeproj (< 1.26.0)
 
 CHECKSUMS
@@ -159,6 +161,7 @@ CHECKSUMS
   rexml (3.4.4) sha256=19e0a2c3425dfbf2d4fc1189747bdb2f849b6c5e74180401b15734bc97b5d142
   ruby-macho (2.5.1) sha256=9075e52e0f9270b552a90b24fcc6219ad149b0d15eae1bc364ecd0ac8984f5c9
   securerandom (0.4.1) sha256=cc5193d414a4341b6e225f0cb4446aceca8e50d5e1888743fac16987638ea0b1
+  tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
   typhoeus (1.7.1) sha256=86dcb6d787ee08e34947c9436b24af3c4b02880dc83c466b6ca4dbfc53c2ee7f
   tzinfo (2.0.6) sha256=8daf828cc77bcf7d63b0e3bdb6caa47e2272dcfaf4fbfe46f8c3a9df087a829b
   xcodeproj (1.25.1) sha256=9a2310dccf6d717076e86f602b17c640046b6f1dfe64480044596f6f2f13dc84

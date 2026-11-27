@@ -146,6 +146,25 @@ jobs:
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
+      # whisper.xcframework is build output (gitignored): build it before pod install, or the
+      # podspec's vendored framework is missing and WhisperStt fails with "'whisper.h' file not found"
+      - name: Get whisper.cpp revision
+        if: env.turbo_cache_hit != 1
+        id: whisper-rev
+        run: echo "rev=$(git rev-parse HEAD:cpp/whisper.cpp)" >> $GITHUB_OUTPUT
+
+      - name: Cache whisper.xcframework
+        if: env.turbo_cache_hit != 1
+        id: whisper-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ios/Frameworks/whisper.xcframework
+          key: ${{ runner.os }}-whisper-xcframework-${{ steps.whisper-rev.outputs.rev }}-${{ hashFiles('scripts/build-ios-whisper.sh') }}
+
+      - name: Build whisper.xcframework
+        if: env.turbo_cache_hit != 1 && steps.whisper-cache.outputs.cache-hit != 'true'
+        run: yarn build:ios-whisper
+
       - name: Install cocoapods
         if: env.turbo_cache_hit != 1
         run: |

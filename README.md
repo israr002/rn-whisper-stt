@@ -4,15 +4,13 @@ Real-time, on-device speech-to-text for React Native, powered by [whisper.cpp](h
 
 - **Live transcription**: text appears while people speak and is finalized at each pause
 - **On-device and offline**: audio never leaves the phone
-- **Built for long sessions**: keeps transcribing with the app in the background or the screen off (Android)
-- **Fast on mid-range phones**: ~100–400 ms per utterance with the 44 MB `tiny.en` model
-
-> **Status:** Android works. iOS is in progress; the package will be published to npm once iOS is supported.
-> Calls on iOS currently reject with `E_UNSUPPORTED`.
+- **Built for long sessions**: keeps transcribing with the app in the background or the screen locked, on Android and iOS
+- **Fast**: ~90–190 ms per utterance on an iPhone 13 Pro (Metal GPU), ~100–400 ms on a mid-range Android phone
+- **iOS and Android**, React Native New Architecture (TurboModule)
 
 ## Demo
 
-https://github.com/user-attachments/assets/bbb57d6b-c9cf-4b9d-b64a-01a47f43ae30
+https://github.com/user-attachments/assets/134a7868-885d-4644-bd26-a916ac317769
 
 ## How it works
 
@@ -32,18 +30,41 @@ npm install react-native-whisper-stt
 yarn add react-native-whisper-stt
 ```
 
-Then rebuild your app (`npx react-native run-android`). It requires the React Native New Architecture (the default since 0.76) and does not work in Expo Go.
+It requires the React Native New Architecture (the default since 0.76) and does not work in Expo Go.
 
-The library's Android manifest adds `RECORD_AUDIO`, `INTERNET` (model download), the microphone foreground-service permissions, `WAKE_LOCK` and `POST_NOTIFICATIONS`. Your app must **request `RECORD_AUDIO` at runtime** before recording.
+### iOS
+
+```sh
+cd ios && pod install
+```
+
+Add to your app's `Info.plist`:
+
+```xml
+<!-- Required: shown in the microphone permission prompt -->
+<key>NSMicrophoneUsageDescription</key>
+<string>Used to transcribe speech on your device.</string>
+<!-- Optional: keep transcribing in the background / with the screen locked -->
+<key>UIBackgroundModes</key>
+<array>
+  <string>audio</string>
+</array>
+```
+
+whisper.cpp ships prebuilt (with Metal) inside the package, so no extra build tools are needed. Minimum iOS 15.1.
+
+### Android
+
+Rebuild your app (`npx react-native run-android`). The library's manifest adds `RECORD_AUDIO`, `INTERNET` (model download), the microphone foreground-service permissions, `WAKE_LOCK` and `POST_NOTIFICATIONS`. On Android 13+, also request `POST_NOTIFICATIONS` so the "Transcribing" notification shows (recording works without it).
 
 ## Usage
 
 ```tsx
-import { PermissionsAndroid } from 'react-native';
 import {
   addTranscriptListener,
   downloadModel,
   init,
+  requestMicrophonePermission,
   startRecording,
   stopRecording,
 } from 'react-native-whisper-stt';
@@ -58,9 +79,10 @@ const sub = addTranscriptListener(({ id, text, isFinal }) => {
   console.log(id, isFinal ? 'final' : 'partial', text);
 });
 
-// 3. Record
-await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.RECORD_AUDIO);
-await startRecording();
+// 3. Record (asks for microphone access the first time, on iOS and Android)
+if (await requestMicrophonePermission()) {
+  await startRecording();
+}
 // ...
 const fullTranscript = await stopRecording();
 sub.remove();
@@ -78,7 +100,8 @@ See [`example/src/App.tsx`](example/src/App.tsx) for a complete app.
 | `init({ model?, modelPath? })` | Loads a registry model (default `tiny.en`) or your own ggml file. |
 | `isInitialized()` | Whether a model is loaded. |
 | `release()` | Frees the model. |
-| `startRecording(options?)` | Starts continuous transcription. |
+| `requestMicrophonePermission()` | Asks for microphone access if not decided yet; resolves with whether it's granted. |
+| `startRecording(options?)` | Starts continuous transcription. Needs microphone permission. |
 | `stopRecording()` | Stops, waits for the last utterance and resolves with the full transcript. |
 | `isRecording()` | Whether a recording session is active. |
 | `addTranscriptListener(cb)` | `{ id, text, isFinal, audioMs, latencyMs }` per partial/final. |
@@ -88,6 +111,7 @@ See [`example/src/App.tsx`](example/src/App.tsx) for a complete app.
 
 | Option | Default | Description |
 |---|---|---|
+| `prompt` | none | Vocabulary hint: names and terms you expect, e.g. `"Israr Khan, Zerodha, Kubernetes"`. See below. |
 | `endSilenceMs` | `700` | Pause that ends an utterance. Lower gives faster finals but more fragmented sentences. |
 | `livePartials` | `true` | Emit partial results while someone is speaking. |
 | `partialIntervalMs` | `600` | Minimum time between partials. |
@@ -95,8 +119,18 @@ See [`example/src/App.tsx`](example/src/App.tsx) for a complete app.
 | `preRollMs` | `800` | Audio kept from before speech onset, so soft starts aren't cut. |
 | `minUtteranceMs` | `1000` | Shorter utterances are merged with the next one. |
 | `maxUtteranceMs` | `20000` | Forced cut for very long monologues. |
-| `foregroundService` | `true` | Android: keep transcribing in the background / screen off. |
-| `notificationTitle` / `notificationText` | `"Transcribing"` / `"Listening and transcribing on device"` | Text of the foreground-service notification. |
+| `foregroundService` | `true` | Android: keep transcribing in the background / screen off. (iOS: see [Background recording](#background-recording).) |
+| `notificationTitle` / `notificationText` | `"Transcribing"` / `"Listening and transcribing on device"` | Android: text of the foreground-service notification. |
+
+### Vocabulary hint (`prompt`)
+
+Whisper often misspells rare names, e.g. "Israr" as "Israel". Pass the words you expect and it will prefer them:
+
+```ts
+await startRecording({ prompt: 'Israr Khan, Zerodha, Kubernetes' });
+```
+
+Whisper treats the prompt as text that came just before the audio, so it nudges spelling without forcing it. Keep it short (a few names or terms, comma-separated): long prompts slow each run down and can make Whisper repeat prompt words.
 
 ### Error codes
 
@@ -106,12 +140,20 @@ See [`example/src/App.tsx`](example/src/App.tsx) for a complete app.
 
 | Model | Size | Notes |
 |---|---|---|
-| `tiny.en` (default) | 44 MB | Fastest. Recommended for live transcription. |
-| `base.en` | 82 MB | Larger and ~1.5–2× slower. |
+| `tiny.en` (default) | 44 MB | Fastest. Good for most live transcription on Android. |
+| `base.en` | 82 MB | Noticeably better with names and accents, and fewer repetition glitches. On iPhones (Metal) it runs about as fast as `tiny.en`; on Android CPUs ~1.5–2× slower. |
 
-Both are 8-bit (q8_0) ggml models from [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp). To use your own ggml file, pass `init({ modelPath })`.
+Both are 8-bit (q8_0) ggml models from [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp). Models are downloaded at runtime when you call `downloadModel()` (nothing is downloaded automatically) and kept in app storage, excluded from iCloud backup. To use your own ggml file (another size, a multilingual model, or one bundled with your app), pass `init({ modelPath })`.
 
-## Background recording (Android)
+## Background recording
+
+### iOS
+
+With `audio` in `UIBackgroundModes` (see [Installation](#ios)), recording continues with the app in the background or the screen locked. As on Android, start recording while the app is in the foreground.
+
+iOS doesn't allow GPU work in the background. The library switches to a CPU copy of the model when the app leaves the foreground (loaded on first need, ~0.1 s) and back to Metal when it returns. Live partials pause in the background, since nobody can see them; final text keeps arriving.
+
+### Android
 
 With `foregroundService: true`, a microphone foreground service shows a "Transcribing" notification and holds a partial wake lock. Transcription then continues with the app in the background or the screen off. Recording must be **started while the app is in the foreground**, which is an Android requirement.
 
@@ -119,13 +161,14 @@ Some manufacturers (for example vivo) confine background apps to the slow CPU co
 
 ## Performance
 
-Measured on a vivo V2231 (MediaTek Dimensity 7200) with `tiny.en`:
+| | iPhone 13 Pro, `base.en` | vivo V2231 (Dimensity 7200), `tiny.en` |
+|---|---|---|
+| Whisper run per utterance | ~90–190 ms (Metal) | ~100–400 ms (CPU) |
+| Same, app in background | ~80–290 ms (CPU, measured with `tiny.en`) | ~100–400 ms |
+| Final text after the speaker stops | ~0–0.2 s | ~0–0.5 s |
+| Model load + warm-up | ~0.4 s | ~0.2 s |
 
-| | |
-|---|---|
-| Whisper run per utterance | ~100–400 ms |
-| Final text after the speaker stops | ~0–0.5 s |
-| Model load + warm-up | ~0.2 s |
+On iOS, the first launch after installing compiles the Metal shaders (~10 s on an iPhone 13 Pro, cached by iOS afterwards). The library starts this as soon as the module loads, so it normally finishes while the model downloads. If the model is already on the device, the first `init()` waits for whatever is left of the compile.
 
 ## Contributing
 
@@ -137,6 +180,10 @@ git clone --recursive https://github.com/israr002/rn-whisper-stt.git
 git submodule update --init
 yarn
 yarn example android
+# iOS: builds whisper.cpp into ios/Frameworks/whisper.xcframework first (needs cmake: brew install cmake)
+yarn build:ios-whisper
+cd example/ios && bundle install && bundle exec pod install && cd ../..
+yarn example ios
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -146,6 +193,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 MIT. Bundled and downloaded components:
 
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp): MIT
-- [Silero VAD](https://github.com/snakers4/silero-vad) (`silero_vad.onnx`): MIT
+- [Silero VAD](https://github.com/snakers4/silero-vad) (`silero_vad.onnx` on Android, `ggml-silero-v5.1.2.bin` on iOS): MIT
 - [OpenAI Whisper](https://github.com/openai/whisper) model weights: MIT
-- [ONNX Runtime](https://github.com/microsoft/onnxruntime): MIT
+- [ONNX Runtime](https://github.com/microsoft/onnxruntime) (Android): MIT

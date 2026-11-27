@@ -42,6 +42,12 @@ export type RecordingOptions = {
   /** Minimum time between partial results. Default 600 */
   partialIntervalMs?: number;
   /**
+   * Vocabulary hint: names, companies and terms you expect, e.g. "Israr Khan, Zerodha, Kubernetes".
+   * Whisper treats it as preceding text, so it nudges spelling towards these words. Keep it short
+   * (a few dozen words); it's tokenized on every run.
+   */
+  prompt?: string;
+  /**
    * Android: run a microphone foreground service so transcription continues with the app
    * in the background or the screen off. Default true
    */
@@ -177,7 +183,7 @@ export function release(): Promise<void> {
 
 /**
  * Starts continuous transcription from the microphone. Results arrive through
- * addTranscriptListener. Requires RECORD_AUDIO to be granted (the library doesn't prompt).
+ * addTranscriptListener. Requires microphone permission: see requestMicrophonePermission().
  */
 export function startRecording(options: RecordingOptions = {}): Promise<void> {
   return native().startRecording(options);
@@ -186,6 +192,14 @@ export function startRecording(options: RecordingOptions = {}): Promise<void> {
 /** Stops recording; resolves with the full transcript once the last utterance is done. */
 export function stopRecording(): Promise<string> {
   return native().stopRecording();
+}
+
+/**
+ * Asks for microphone access if it hasn't been decided yet; resolves with whether it's granted.
+ * Android 13+ apps should also request POST_NOTIFICATIONS so the recording notification shows.
+ */
+export function requestMicrophonePermission(): Promise<boolean> {
+  return native().requestMicrophonePermission();
 }
 
 export function isRecording(): boolean {

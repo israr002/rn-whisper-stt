@@ -22,6 +22,7 @@ export interface Spec extends TurboModule {
     preRollMs?: number;
     livePartials?: boolean;
     partialIntervalMs?: number;
+    prompt?: string;
     foregroundService?: boolean;
     notificationTitle?: string;
     notificationText?: string;
@@ -29,6 +30,9 @@ export interface Spec extends TurboModule {
   /** Resolves with the full transcript once the last utterance is transcribed. */
   stopRecording(): Promise<string>;
   isRecording(): boolean;
+
+  /** Asks for microphone access if not decided yet; resolves with whether it's granted. */
+  requestMicrophonePermission(): Promise<boolean>;
 
   // NativeEventEmitter
   addListener(eventName: string): void;

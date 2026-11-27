@@ -47,6 +47,7 @@ class StreamingTranscriber(
         val partialIntervalMs: Int = 600,     // whisper.cpp runs take ~100-400ms on mid-range phones
         // Start transcribing this soon after speech stops; reused as the final if no more speech comes
         val speculativeSilenceMs: Int = 200,
+        val prompt: String? = null,           // vocabulary hint passed to every whisper run
     )
 
     interface Listener {
@@ -109,6 +110,7 @@ class StreamingTranscriber(
                 if (read < chunk) break
                 for (i in 0 until chunk) frame[i] = pcm[i] / 32768f
                 seg.push(frame, vad.process(frame))
+                if (seg.consumeVadReset()) vad.reset()
             }
             seg.flush(force = true)
         } catch (e: Exception) {
@@ -124,8 +126,11 @@ class StreamingTranscriber(
     /** Runs on the audio thread. Turns per-chunk VAD probabilities into utterances. */
     private inner class Segmenter {
         private val chunkMs = SileroVad.CHUNK_SIZE * 1000 / SAMPLE_RATE
-        private val preRoll = ArrayDeque<FloatArray>()
+        // Recent chunks from before speech onset
+        private inner class Chunk(val frame: FloatArray, val prob: Float, val rms: Float)
+        private val preRoll = ArrayDeque<Chunk>()
         private val preRollChunks = config.preRollMs / chunkMs
+        private val lookBackChunks = maxOf(preRollChunks, LOOK_BACK_MS / chunkMs)
 
         private var audio = FloatArray(SAMPLE_RATE * 32)
         private var length = 0
@@ -137,11 +142,42 @@ class StreamingTranscriber(
         private var lastPartialAt = 0L
         private var speechEnd = 0          // audio length right after the last speech chunk
         private var submittedSpeechEnd = -1
+        private var vadResetPending = false
 
         // A too-short burst (e.g. "ask not" under noise) waiting to be prepended to the next utterance
         private var carry: FloatArray? = null
         private var carrySpeechMs = 0
         private var chunksSinceCarry = 0
+
+        /**
+         * Where in [preRoll] the new utterance starts. Normally the last preRollMs.
+         *
+         * Silero can score real speech near zero: "ask not" in the JFK clip is as loud as its
+         * neighbours but scored 0.0-0.4, so it never started an utterance and was lost. Whisper is
+         * the better judge, so when the audio before the onset holds evidence of speech (a weak
+         * VAD score, or audio well above the noise floor) the utterance starts there instead. The
+         * search walks back from the onset and stops at the first quiet gap of LOOK_BACK_GAP_MS.
+         */
+        private fun preRollStart(): Int {
+            val default = maxOf(0, preRoll.size - preRollChunks)
+            val loud = maxOf(preRoll.minOf { it.rms } * LOUD_OVER_FLOOR, MIN_LOUD_RMS)
+            val evidence = preRoll.map { it.prob >= WEAK_SPEECH_PROB || it.rms >= loud }
+            var start = default
+            for (i in default - 1 downTo 0) {
+                // Two chunks in a row: a single click isn't evidence
+                if (evidence[i] && evidence[i + 1]) start = i
+                else if ((start - i) * chunkMs > LOOK_BACK_GAP_MS) break
+            }
+            return if (start == default) default else maxOf(0, start - LOOK_BACK_MARGIN_CHUNKS)
+        }
+
+        /**
+         * True once after an utterance ended on a pause. Silero's recurrent state drifts during a
+         * recording: on a vivo V2231, speech after the first utterance scored 0.1-0.5 instead of
+         * 0.6-0.95 and whole phrases fell under the threshold. A fresh state per utterance fixed it
+         * (windows detected: 22/64 -> 57/68). Not after a max-length cut: speech is still going on.
+         */
+        fun consumeVadReset(): Boolean = vadResetPending.also { vadResetPending = false }
 
         fun push(frame: FloatArray, prob: Float) {
             if (!active) {
@@ -165,11 +201,11 @@ class StreamingTranscriber(
                         speechMs = carrySpeechMs
                         carry = null
                     }
-                    preRoll.forEach { append(it) }
+                    preRoll.drop(preRollStart()).forEach { append(it.frame) }
                     preRoll.clear()
                 } else {
-                    preRoll.addLast(frame.copyOf())
-                    if (preRoll.size > preRollChunks) preRoll.removeFirst()
+                    preRoll.addLast(Chunk(frame.copyOf(), prob, rms(frame)))
+                    if (preRoll.size > lookBackChunks) preRoll.removeFirst()
                     return
                 }
             }
@@ -189,6 +225,7 @@ class StreamingTranscriber(
                 trailingSilenceMs >= config.maxHoldSilenceMs ||
                 utteranceMs >= config.maxUtteranceMs
             if (ended) {
+                vadResetPending = trailingSilenceMs >= config.endSilenceMs
                 flush(force = false)
             } else if (workerBusy.get()) {
                 return
@@ -221,15 +258,38 @@ class StreamingTranscriber(
                 // Too short to transcribe alone. Keep it in case more speech follows; the UI
                 // drops any partial it showed for this id
                 if (!force) {
-                    carry = audio.copyOf(trimmedEnd().coerceIn(1, length))
+                    // All of it, not just up to the last detected speech: the VAD may have
+                    // missed the rest of the phrase (see preRollStart)
+                    carry = audio.copyOf(length.coerceAtLeast(1))
                     carrySpeechMs = speechMs
                     chunksSinceCarry = 0
                 }
                 if (config.livePartials) listener.onTranscript(segmentId, "", true, 0, 0)
                 return
             }
-            submitted(trimmedEnd(), isFinal = true)
-            if (force) Log.d(TAG, "Flushed trailing utterance #$segmentId on stop")
+            val end = trimmedEnd()
+            submitted(end, isFinal = true)
+            if (force) {
+                Log.d(TAG, "Flushed trailing utterance #$segmentId on stop")
+            } else {
+                // The pause after the last detected speech can hold speech the VAD scored low
+                // (e.g. the next phrase starting while a short utterance waited out
+                // maxHoldSilenceMs). Don't discard it: hand it to the next utterance's look-back
+                val chunk = SileroVad.CHUNK_SIZE
+                var i = end
+                while (i + chunk <= length) {
+                    val frame = audio.copyOfRange(i, i + chunk)
+                    preRoll.addLast(Chunk(frame, 0f, rms(frame)))
+                    i += chunk
+                }
+                while (preRoll.size > lookBackChunks) preRoll.removeFirst()
+            }
+        }
+
+        private fun rms(frame: FloatArray): Float {
+            var sum = 0.0
+            for (x in frame) sum += x * x
+            return Math.sqrt(sum / frame.size).toFloat()
         }
 
         private fun append(frame: FloatArray) {
@@ -252,7 +312,7 @@ class StreamingTranscriber(
             try {
                 // A partial that already covered every speech chunk is as good as a fresh run
                 val reuse = isFinal && cachedId == segmentId && cachedSpeechEnd >= speechEnd
-                val text = if (reuse) cachedText else engine.transcribeSamples(samples).trim()
+                val text = if (reuse) cachedText else engine.transcribeSamples(samples, config.prompt).trim()
                 cachedId = segmentId
                 cachedSpeechEnd = speechEnd
                 cachedText = text
@@ -272,6 +332,14 @@ class StreamingTranscriber(
 
     companion object {
         private const val TAG = "StreamingTranscriber"
+        // How far before speech onset to look for weak speech, and what counts as weak
+        private const val LOOK_BACK_MS = 5000
+        private const val LOOK_BACK_GAP_MS = 1500
+        private const val WEAK_SPEECH_PROB = 0.15f
+        // Loud = this many times the quietest recent chunk, and at least MIN_LOUD_RMS
+        private const val LOUD_OVER_FLOOR = 3f
+        private const val MIN_LOUD_RMS = 0.01f
+        private const val LOOK_BACK_MARGIN_CHUNKS = 6 // ~190 ms before the first evidence
         const val SAMPLE_RATE = 16000
     }
 }

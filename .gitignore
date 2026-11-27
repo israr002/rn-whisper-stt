@@ -83,3 +83,10 @@ nitrogen/
 *.jsbundle
 .metro-health-check*
 /coverage
+
+# Built by scripts/build-ios-whisper.sh
+ios/Frameworks/
+ios/build-whisper/
+
+# Local device builds (xcodebuild -derivedDataPath)
+example/ios/build-device/
